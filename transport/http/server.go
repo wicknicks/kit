@@ -3,6 +3,7 @@ package http
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 
 	"github.com/go-kit/kit/endpoint"
@@ -94,6 +95,7 @@ func ServerFinalizer(f ...ServerFinalizerFunc) ServerOption {
 // ServeHTTP implements http.Handler.
 func (s Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+	fmt.Printf(">>> Building an intercepting writer with %T\n", w)
 
 	if len(s.finalizer) > 0 {
 		iw := &interceptingWriter{w, http.StatusOK, 0}
