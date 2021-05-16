@@ -96,6 +96,12 @@ func ServerFinalizer(f ...ServerFinalizerFunc) ServerOption {
 func (s Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	fmt.Printf(">>> Building an intercepting writer with %T\n", w)
+	_, ok := w.(http.Hijacker)
+	if !ok {
+		fmt.Printf(">>> Response writer is not an implementation of Hijacker{}\n")
+	} else {
+		fmt.Printf(">>> Response writer implements the Hijacker{} interface\n")
+	}
 
 	if len(s.finalizer) > 0 {
 		iw := &interceptingWriter{w, http.StatusOK, 0}
@@ -107,6 +113,13 @@ func (s Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 		}()
 		w = iw
+	}
+	fmt.Printf(">>> Built an intercepting writer. New type %T\n", w)
+	_, ok = w.(http.Hijacker)
+	if !ok {
+		fmt.Printf(">>> Intercepting writer is not an implementation of Hijacker{}\n")
+	} else {
+		fmt.Printf(">>> Intercepting writer implements the Hijacker{} interface\n")
 	}
 
 	for _, f := range s.before {
