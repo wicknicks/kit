@@ -96,27 +96,44 @@ func ServerFinalizer(f ...ServerFinalizerFunc) ServerOption {
 func (s Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	fmt.Printf(">>> Building an intercepting writer with %T\n", w)
-	_, ok := w.(http.Hijacker)
-	if !ok {
+	hj, hijackable := w.(http.Hijacker)
+	if !hijackable {
 		fmt.Printf(">>> Response writer is not an implementation of Hijacker{}\n")
 	} else {
 		fmt.Printf(">>> Response writer implements the Hijacker{} interface\n")
 	}
 
-	if len(s.finalizer) > 0 {
-		iw := &interceptingWriter{w, http.StatusOK, 0}
-		defer func() {
-			ctx = context.WithValue(ctx, ContextKeyResponseHeaders, iw.Header())
-			ctx = context.WithValue(ctx, ContextKeyResponseSize, iw.written)
-			for _, f := range s.finalizer {
-				f(ctx, iw.code, r)
-			}
-		}()
-		w = iw
+	if hijackable {
+		if len(s.finalizer) > 0 {
+			fmt.Printf(">>> Creating an instance of interceptingHijackableWriter\n")
+			iw := &interceptingHijackableWriter{w, hj, http.StatusOK, 0}
+			defer func() {
+				ctx = context.WithValue(ctx, ContextKeyResponseHeaders, iw.Header())
+				ctx = context.WithValue(ctx, ContextKeyResponseSize, iw.written)
+				for _, f := range s.finalizer {
+					f(ctx, iw.code, r)
+				}
+			}()
+			w = iw
+		}
+	} else {
+		if len(s.finalizer) > 0 {
+			fmt.Printf(">>> Creating an instance of interceptingWriter\n")
+			iw := &interceptingWriter{w, http.StatusOK, 0}
+			defer func() {
+				ctx = context.WithValue(ctx, ContextKeyResponseHeaders, iw.Header())
+				ctx = context.WithValue(ctx, ContextKeyResponseSize, iw.written)
+				for _, f := range s.finalizer {
+					f(ctx, iw.code, r)
+				}
+			}()
+			w = iw
+		}
 	}
+
 	fmt.Printf(">>> Built an intercepting writer. New type %T\n", w)
-	_, ok = w.(http.Hijacker)
-	if !ok {
+	_, hijackable = w.(http.Hijacker)
+	if !hijackable {
 		fmt.Printf(">>> Intercepting writer is not an implementation of Hijacker{}\n")
 	} else {
 		fmt.Printf(">>> Intercepting writer implements the Hijacker{} interface\n")
@@ -241,6 +258,13 @@ type Headerer interface {
 
 type interceptingWriter struct {
 	http.ResponseWriter
+	code    int
+	written int64
+}
+
+type interceptingHijackableWriter struct {
+	http.ResponseWriter
+	http.Hijacker
 	code    int
 	written int64
 }
