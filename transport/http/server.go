@@ -281,3 +281,16 @@ func (w *interceptingWriter) Write(p []byte) (int, error) {
 	w.written += int64(n)
 	return n, err
 }
+
+// WriteHeader may not be explicitly called, so care must be taken to
+// initialize w.code to its default value of http.StatusOK.
+func (w *interceptingHijackableWriter) WriteHeader(code int) {
+	w.code = code
+	w.ResponseWriter.WriteHeader(code)
+}
+
+func (w *interceptingHijackableWriter) Write(p []byte) (int, error) {
+	n, err := w.ResponseWriter.Write(p)
+	w.written += int64(n)
+	return n, err
+}
