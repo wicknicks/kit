@@ -103,32 +103,23 @@ func (s Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		fmt.Printf(">>> Response writer implements the Hijacker{} interface\n")
 	}
 
-	if hijackable {
-		if len(s.finalizer) > 0 {
-			fmt.Printf(">>> Creating an instance of interceptingHijackableWriter\n")
-			iw := &interceptingHijackableWriter{w, hj, http.StatusOK, 0}
-			defer func() {
-				ctx = context.WithValue(ctx, ContextKeyResponseHeaders, iw.Header())
-				ctx = context.WithValue(ctx, ContextKeyResponseSize, iw.written)
-				for _, f := range s.finalizer {
-					f(ctx, iw.code, r)
-				}
-			}()
-			w = iw
+	if len(s.finalizer) > 0 {
+		fmt.Printf(">>> Creating an instance of interceptingWriter\n")
+		var iw *interceptingWriter
+		if hijackable {
+			iw = &interceptingWriter{w, hj, http.StatusOK, 0}
+		} else {
+			iw = &interceptingWriter{w, nil, http.StatusOK, 0}
 		}
-	} else {
-		if len(s.finalizer) > 0 {
-			fmt.Printf(">>> Creating an instance of interceptingWriter\n")
-			iw := &interceptingWriter{w, http.StatusOK, 0}
-			defer func() {
-				ctx = context.WithValue(ctx, ContextKeyResponseHeaders, iw.Header())
-				ctx = context.WithValue(ctx, ContextKeyResponseSize, iw.written)
-				for _, f := range s.finalizer {
-					f(ctx, iw.code, r)
-				}
-			}()
-			w = iw
-		}
+
+		defer func() {
+			ctx = context.WithValue(ctx, ContextKeyResponseHeaders, iw.Header())
+			ctx = context.WithValue(ctx, ContextKeyResponseSize, iw.written)
+			for _, f := range s.finalizer {
+				f(ctx, iw.code, r)
+			}
+		}()
+		w = iw
 	}
 
 	fmt.Printf(">>> Built an intercepting writer. New type %T\n", w)
@@ -258,12 +249,6 @@ type Headerer interface {
 
 type interceptingWriter struct {
 	http.ResponseWriter
-	code    int
-	written int64
-}
-
-type interceptingHijackableWriter struct {
-	http.ResponseWriter
 	http.Hijacker
 	code    int
 	written int64
@@ -277,19 +262,6 @@ func (w *interceptingWriter) WriteHeader(code int) {
 }
 
 func (w *interceptingWriter) Write(p []byte) (int, error) {
-	n, err := w.ResponseWriter.Write(p)
-	w.written += int64(n)
-	return n, err
-}
-
-// WriteHeader may not be explicitly called, so care must be taken to
-// initialize w.code to its default value of http.StatusOK.
-func (w *interceptingHijackableWriter) WriteHeader(code int) {
-	w.code = code
-	w.ResponseWriter.WriteHeader(code)
-}
-
-func (w *interceptingHijackableWriter) Write(p []byte) (int, error) {
 	n, err := w.ResponseWriter.Write(p)
 	w.written += int64(n)
 	return n, err
